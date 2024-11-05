@@ -12,12 +12,15 @@ import (
 
 func main() {
 	startNow := time.Now()
-	internal.CheckEnvVariables()
+	err := internal.CheckEnvVariables()
+	if err != nil {
+		log.Fatalf("Error during loading environmental variables: %v", err)
+	}
 
 	gitlabUser := services.GetGitlabUser()
 
 	var result map[string]interface{}
-	err := json.Unmarshal([]byte(gitlabUser), &result)
+	err = json.Unmarshal([]byte(gitlabUser), &result)
 
 	if err != nil {
 		log.Fatalf("Error during parsing GitLab user: %v", err)
