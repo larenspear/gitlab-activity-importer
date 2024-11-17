@@ -1,28 +1,42 @@
 package internal
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
-func CheckEnvVariables() {
+func CheckEnvVariables() error {
 	if os.Getenv("ENV") == "DEVELOPMENT" {
-		err := godotenv.Load()
-
-		if err != nil {
-			log.Fatalf("Error loading the .env file: %v", err)
+		if err := godotenv.Load(); err != nil {
+			return fmt.Errorf("error loading .env file: %v", err)
 		}
 	}
 
-	requiredEnvVars := []string{"BASE_URL", "GITLAB_TOKEN", "COMMITER_NAME", "COMMITER_EMAIL", "ORIGIN_REPO_URL", "ORIGIN_TOKEN"}
+	requiredEnvVars := []string{
+		"BASE_URL",
+		"GITLAB_TOKEN",
+		"COMMITER_NAME",
+		"COMMITER_EMAIL",
+		"ORIGIN_REPO_URL",
+		"ORIGIN_TOKEN",
+	}
 
-	for _, envVal := range requiredEnvVars {
-		if os.Getenv(envVal) == "" {
-			log.Fatalf("Environment variable %s is not set", envVal)
+	var missingVars []string
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			missingVars = append(missingVars, envVar)
 		}
 	}
+
+	if len(missingVars) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missingVars, ", "))
+	}
+
+	return nil
 }
 
 func GetHomeDirectory() string {

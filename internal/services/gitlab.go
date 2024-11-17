@@ -44,33 +44,33 @@ func GetUsersProjectsIds(userId int) ([]int, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/users/%v/contributed_projects", url, userId), nil)
 	if err != nil {
-		log.Fatalf("Error creating the request: %v", err)
+		return nil, fmt.Errorf("error creating the request: %v", err)
 	}
 
 	req.Header.Set("PRIVATE-TOKEN", os.Getenv("GITLAB_TOKEN"))
 	res, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Error making the request: %v", err)
+		return nil, fmt.Errorf("error making the request: %v", err)
 	}
 
 	if res.StatusCode != http.StatusOK {
-		log.Fatalf("Request failed with status code: %v", res.StatusCode)
+		return nil, fmt.Errorf("request failed with status code: %v", res.StatusCode)
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Fatalf("Error reading the response body: %v", err)
+		return nil, fmt.Errorf("error reading the response body: %v", err)
 	}
 
 	res.Body.Close()
 
 	var result []map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		return nil, fmt.Errorf("error parsing json: %v", err)
 	}
 
 	if len(result) == 0 {
-		log.Fatalf("No contributed projects found")
+		return nil, fmt.Errorf("no contributed projects found")
 	}
 
 	var projectIds []int
