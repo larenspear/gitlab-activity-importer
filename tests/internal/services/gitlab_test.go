@@ -13,35 +13,78 @@ import (
 )
 
 func TestGetGitlabUser(t *testing.T) {
-	os.Setenv("BASE_URL", "http://test-url.com")
-	os.Setenv("GITLAB_TOKEN", "test-token")
-	defer os.Unsetenv("BASE_URL")
-	defer os.Unsetenv("GITLAB_TOKEN")
+	tests := []struct {
+		name        string
+		token       string
+		statusCode  int
+		expectError bool
+		expectedMsg string
+	}{
+		{
+			name:        "token correct",
+			token:       "valid-token",
+			statusCode:  200,
+			expectError: false,
+			expectedMsg: `{"username":"testuser","id":"1"}`,
+		},
+		{
+			name:        "missing token",
+			token:       "",
+			statusCode:  401,
+			expectError: true,
+			expectedMsg: "User not found",
+		},
+		{
+			name:        "invalid token",
+			token:       "invalid-token",
+			statusCode:  401,
+			expectError: true,
+			expectedMsg: "User not found",
+		},
+	}
 
-	expectedResponse := `{"username":"testuser", "id":"1"}`
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.token != "" {
+				os.Setenv("GITLAB_TOKEN", tt.token)
+			} else {
+				os.Unsetenv("GITLAB_TOKEN")
+			}
+			defer os.Unsetenv("GITLAB_TOKEN")
 
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.String() != "/api/v4/user" {
-			t.Errorf("Expected URL '/api/v4/user', got '%s'", r.URL.String())
-		}
-		if r.Header.Get("PRIVATE-TOKEN") != "test-token" {
-			t.Errorf("Expected PRIVATE-TOKEN 'test-token', got '%s'", r.Header.Get("PRIVATE-TOKEN"))
-		}
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("Expected GET method, got %s", r.Method)
+				}
+				if r.Header.Get("PRIVATE-TOKEN") != tt.token {
+					t.Errorf("Expected PRIVATE-TOKEN '%s', got '%s'", tt.token, r.Header.Get("PRIVATE-TOKEN"))
+				}
+				w.WriteHeader(tt.statusCode)
+				if tt.statusCode == 200 {
+					fmt.Fprint(w, `{"username":"testuser","id":"1"}`)
+				} else {
+					fmt.Fprint(w, "User not found")
+				}
+			}))
+			defer mockServer.Close()
 
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, expectedResponse)
-	}))
-	defer mockServer.Close()
+			os.Setenv("BASE_URL", mockServer.URL)
+			defer os.Unsetenv("BASE_URL")
 
-	os.Setenv("BASE_URL", mockServer.URL)
+			result := services.GetGitlabUser()
 
-	result := services.GetGitlabUser()
-
-	if result != expectedResponse {
-		t.Errorf("Expected '%s', got '%s'", expectedResponse, result)
+			if tt.expectError {
+				if result != tt.expectedMsg {
+					t.Errorf("Expected '%s', got '%s'", tt.expectedMsg, result)
+				}
+			} else {
+				if result != tt.expectedMsg {
+					t.Errorf("Expected '%s', got '%s'", tt.expectedMsg, result)
+				}
+			}
+		})
 	}
 }
-
 func TestGetUsersProjectsIds(t *testing.T) {
 	tests := []struct {
 		name             string
