@@ -12,30 +12,37 @@ import (
 	"github.com/furmanp/gitlab-activity-importer/internal"
 )
 
-func GetGitlabUser() string {
+func GetGitlabUser() (internal.GitLabUser, error) {
 	url := os.Getenv("BASE_URL")
 
 	client := &http.Client{}
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/user", url), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/user", url), nil)
+	if err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("failed to create request: %v", err)
+	}
 	req.Header.Set("PRIVATE-TOKEN", os.Getenv("GITLAB_TOKEN"))
 
 	res, err := client.Do(req)
-
 	if err != nil {
-		log.Print("something went wrong with your request", err)
+		return internal.GitLabUser{}, fmt.Errorf("error making the request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return internal.GitLabUser{}, fmt.Errorf("request failed with status code: %v", res.StatusCode)
 	}
 
-	if res.StatusCode == http.StatusOK {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			log.Fatal("something went wrong")
-		}
-		json := string(body)
-
-		return json
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("error reading the response body: %v", err)
 	}
 
-	return "User not found"
+	var user internal.GitLabUser
+	if err := json.Unmarshal(body, &user); err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	return user, nil
 }
 
 func GetUsersProjectsIds(userId int) ([]int, error) {

@@ -13,6 +13,11 @@ type Commit struct {
 	AuthoredDate time.Time `json:"authored_date"`
 }
 
+type GitLabUser struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+}
+
 func (c Commit) Print() {
 	fmt.Printf("Commit Details:\n")
 	fmt.Printf("ID           : %s\n", c.ID)

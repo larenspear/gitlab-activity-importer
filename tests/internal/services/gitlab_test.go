@@ -9,37 +9,41 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/furmanp/gitlab-activity-importer/internal"
 	"github.com/furmanp/gitlab-activity-importer/internal/services"
 )
 
 func TestGetGitlabUser(t *testing.T) {
 	tests := []struct {
-		name        string
-		token       string
-		statusCode  int
-		expectError bool
-		expectedMsg string
+		name         string
+		token        string
+		statusCode   int
+		expectError  bool
+		expectedUser internal.GitLabUser
 	}{
 		{
-			name:        "token correct",
+			name:        "valid token and successful response",
 			token:       "valid-token",
 			statusCode:  200,
 			expectError: false,
-			expectedMsg: `{"username":"testuser","id":"1"}`,
+			expectedUser: internal.GitLabUser{
+				ID:       1,
+				Username: "testuser",
+			},
 		},
 		{
-			name:        "missing token",
-			token:       "",
-			statusCode:  401,
-			expectError: true,
-			expectedMsg: "User not found",
+			name:         "missing token",
+			token:        "",
+			statusCode:   401,
+			expectError:  true,
+			expectedUser: internal.GitLabUser{},
 		},
 		{
-			name:        "invalid token",
-			token:       "invalid-token",
-			statusCode:  401,
-			expectError: true,
-			expectedMsg: "User not found",
+			name:         "invalid token",
+			token:        "invalid-token",
+			statusCode:   401,
+			expectError:  true,
+			expectedUser: internal.GitLabUser{},
 		},
 	}
 
@@ -61,9 +65,9 @@ func TestGetGitlabUser(t *testing.T) {
 				}
 				w.WriteHeader(tt.statusCode)
 				if tt.statusCode == 200 {
-					fmt.Fprint(w, `{"username":"testuser","id":"1"}`)
+					fmt.Fprint(w, `{"username":"testuser","id":1}`)
 				} else {
-					fmt.Fprint(w, "User not found")
+					fmt.Fprint(w, "Unauthorized")
 				}
 			}))
 			defer mockServer.Close()
@@ -71,16 +75,21 @@ func TestGetGitlabUser(t *testing.T) {
 			os.Setenv("BASE_URL", mockServer.URL)
 			defer os.Unsetenv("BASE_URL")
 
-			result := services.GetGitlabUser()
+			result, err := services.GetGitlabUser()
 
 			if tt.expectError {
-				if result != tt.expectedMsg {
-					t.Errorf("Expected '%s', got '%s'", tt.expectedMsg, result)
+				if err == nil {
+					t.Errorf("Expected an error but got none")
 				}
-			} else {
-				if result != tt.expectedMsg {
-					t.Errorf("Expected '%s', got '%s'", tt.expectedMsg, result)
-				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("GetGitlabUser returned error: %v", err)
+			}
+
+			if result != tt.expectedUser {
+				t.Errorf("Expected user '%v', got '%v'", tt.expectedUser, result)
 			}
 		})
 	}
@@ -171,3 +180,44 @@ func TestGetUsersProjectsIds(t *testing.T) {
 		})
 	}
 }
+
+// func TestGetProjectsCommits(t *testing.T) {
+// 	tests := []struct {
+// 		name             string
+// 		projectId        int
+// 		statusCode       int
+// 		expectedResponse []internal.Commit
+// 		expectError      bool
+// 	}{
+// 		{
+// 			name:       "contributions found",
+// 			projectId:  1,
+// 			statusCode: 200,
+// 			expectedResponse: []internal.Commit{
+// 				{
+// 					ID:           "123",
+// 					Message:      "first commit",
+// 					AuthorName:   "John Doe",
+// 					AuthorMail:   "john@doe.com",
+// 					AuthoredDate: time.Now(),
+// 				},
+// 				{
+// 					ID:           "456",
+// 					Message:      "second commit",
+// 					AuthorName:   "John Doe",
+// 					AuthorMail:   "john@doe.com",
+// 					AuthoredDate: time.Now(),
+// 				},
+// 			},
+// 			expectError: false,
+// 		},
+// 		{
+// 			name:             "no commits found",
+// 			projectId:        2,
+// 			statusCode:       200,
+// 			expectedResponse: []internal.Commit{},
+// 			expectError:      false,
+// 		},
+// 	}
+
+// }
