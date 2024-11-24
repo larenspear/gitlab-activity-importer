@@ -18,9 +18,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch all tags
-        run: git fetch --prune --tags
-
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
