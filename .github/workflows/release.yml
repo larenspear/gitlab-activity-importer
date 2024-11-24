@@ -8,24 +8,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.23.1' 
+          go-version: '1.23.1'
 
       - name: Build
         run: |
-          # Build for multiple platforms
-          set -e  # Exit on any error
-          
           PLATFORMS=("linux amd64" "windows amd64" "darwin amd64")
-          
+
           for platform in "${PLATFORMS[@]}"; do
             read -r os arch <<< "$platform"
             echo "Building for $os/$arch..."
@@ -35,30 +36,28 @@ jobs:
               binary_name="$binary_name.exe"
             fi
             
-            GOOS=$os GOARCH=$arch go build -ldflags="-X main.Version=${{ github.ref_name }}" \
+            GOOS=$os GOARCH=$arch go build -ldflags="-X main.Version=${GITHUB_REF#refs/tags/}" \
               -o "build/$binary_name-$os-$arch$([[ $os = "windows" ]] && echo ".exe" || echo "")" \
               ./cmd/main.go
           done
+
       - name: Create Archives
         run: |
-          set -e
           cd build
-          
-          # Create archives for each binary
           for file in GitLab-Importer-*; do
             zip "${file}.zip" "$file"
           done
-          
+
       - name: Generate Changelog Notes
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v2
         with:
           configuration: .github/release-changelog-config.yml
+          failOnError: false
         env:
           GITHUB_TOKEN: ${{ secrets.ORIGIN_TOKEN }}
 
       - name: Create GitHub Release
-        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.ORIGIN_TOKEN }}
@@ -67,5 +66,5 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
-          files: |
-            build/*.zip
+          files: build/*.zip
+          generate_release_notes: true
