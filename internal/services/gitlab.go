@@ -12,30 +12,37 @@ import (
 	"github.com/furmanp/gitlab-activity-importer/internal"
 )
 
-func GetGitlabUser() string {
+func GetGitlabUser() (internal.GitLabUser, error) {
 	url := os.Getenv("BASE_URL")
 
 	client := &http.Client{}
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/user", url), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/user", url), nil)
+	if err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("failed to create request: %v", err)
+	}
 	req.Header.Set("PRIVATE-TOKEN", os.Getenv("GITLAB_TOKEN"))
 
 	res, err := client.Do(req)
-
 	if err != nil {
-		log.Print("something went wrong with your request", err)
+		return internal.GitLabUser{}, fmt.Errorf("error making the request: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return internal.GitLabUser{}, fmt.Errorf("request failed with status code: %v", res.StatusCode)
 	}
 
-	if res.StatusCode == http.StatusOK {
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			log.Fatal("something went wrong")
-		}
-		json := string(body)
-
-		return json
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("error reading the response body: %v", err)
 	}
 
-	return "User not found"
+	var user internal.GitLabUser
+	if err := json.Unmarshal(body, &user); err != nil {
+		return internal.GitLabUser{}, fmt.Errorf("error parsing JSON: %v", err)
+	}
+
+	return user, nil
 }
 
 func GetUsersProjectsIds(userId int) ([]int, error) {
@@ -52,6 +59,7 @@ func GetUsersProjectsIds(userId int) ([]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error making the request: %v", err)
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("request failed with status code: %v", res.StatusCode)
@@ -59,30 +67,25 @@ func GetUsersProjectsIds(userId int) ([]int, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading the response body: %v", err)
+		return nil, fmt.Errorf("error reading response: %w", err)
 	}
 
-	res.Body.Close()
-
-	var result []map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error parsing json: %v", err)
+	var projects []struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal(body, &projects); err != nil {
+		return nil, fmt.Errorf("error parsing JSON: %w", err)
 	}
 
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no contributed projects found")
-	}
-
-	var projectIds []int
-	for index := range result {
-		id := result[index]["id"].(float64)
-		projectIds = append(projectIds, int(id))
+	projectIds := make([]int, len(projects))
+	for i, project := range projects {
+		projectIds[i] = project.ID
 	}
 
 	return projectIds, nil
 }
 
-func GetProjectCommits(projectId int, userName string) []internal.Commit {
+func GetProjectCommits(projectId int, userName string) ([]internal.Commit, error) {
 	url := os.Getenv("BASE_URL")
 	token := os.Getenv("GITLAB_TOKEN")
 
@@ -93,29 +96,29 @@ func GetProjectCommits(projectId int, userName string) []internal.Commit {
 	for {
 		req, err := http.NewRequest("GET", fmt.Sprintf("%v/api/v4/projects/%v/repository/commits?author=%v&per_page=100&page=%d", url, projectId, userName, page), nil)
 		if err != nil {
-			log.Fatalf("Error fetching the commits: %v", err)
+			return nil, fmt.Errorf("error fetching the commits: %v", err)
 		}
 
 		req.Header.Set("PRIVATE-TOKEN", token)
 		res, err := client.Do(req)
 		if err != nil {
-			log.Fatalf("Error making the request: %v", err)
+			return nil, fmt.Errorf("error making the request: %v", err)
 		}
 		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
-			log.Fatalf("Request failed with status code: %v", res.StatusCode)
+			return nil, fmt.Errorf("request failed with status code: %v", res.StatusCode)
 		}
 
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			log.Fatalf("Error reading the response body: %v", err)
+			return nil, fmt.Errorf("error reading the response body: %v", err)
 		}
 
 		var commits []internal.Commit
 		err = json.Unmarshal(body, &commits)
 		if err != nil {
-			log.Fatalf("Error parsing JSON: %v", err)
+			return nil, fmt.Errorf("error parsing JSON: %v", err)
 		}
 
 		if len(commits) == 0 {
@@ -128,13 +131,12 @@ func GetProjectCommits(projectId int, userName string) []internal.Commit {
 	}
 
 	if len(allCommits) == 0 {
-		log.Printf("Found no commits in project no.:%v \n", projectId)
-		return nil
+		return nil, fmt.Errorf("found no commits in project no.:%v", projectId)
 	}
 
 	log.Printf("Found total of %v commits in project no.:%v \n", len(allCommits), projectId)
 
-	return allCommits
+	return allCommits, nil
 }
 
 func FetchAllCommits(projectIds []int, commiterName string, commitChannel chan []internal.Commit) {
@@ -146,7 +148,11 @@ func FetchAllCommits(projectIds []int, commiterName string, commitChannel chan [
 		go func(projId int) {
 			defer wg.Done()
 
-			commits := GetProjectCommits(projId, commiterName)
+			commits, err := GetProjectCommits(projId, commiterName)
+			if err != nil {
+				log.Printf("Error fetching commits for project %d: %v", projId, err)
+				return
+			}
 			if len(commits) > 0 {
 				commitChannel <- commits
 			}

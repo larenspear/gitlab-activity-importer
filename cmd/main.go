@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"time"
@@ -17,19 +16,16 @@ func main() {
 		log.Fatalf("Error during loading environmental variables: %v", err)
 	}
 
-	gitlabUser := services.GetGitlabUser()
-
-	var result map[string]interface{}
-	err = json.Unmarshal([]byte(gitlabUser), &result)
+	gitlabUser, err := services.GetGitlabUser()
 
 	if err != nil {
-		log.Fatalf("Error during parsing GitLab user: %v", err)
+		log.Fatalf("Error during reading GitLab User data: %v", err)
 	}
 
-	gitLabUserId := result["id"].(float64)
+	gitLabUserId := gitlabUser.ID
 
 	var projectIds []int
-	projectIds, err = services.GetUsersProjectsIds(int(gitLabUserId))
+	projectIds, err = services.GetUsersProjectsIds(gitLabUserId)
 
 	if err != nil {
 		log.Fatalf("Error during getting users projects: %v", err)
