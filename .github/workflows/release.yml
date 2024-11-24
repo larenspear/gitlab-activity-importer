@@ -16,10 +16,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Important for changelog generation to work
+          fetch-depth: 0
 
       - name: Fetch all tags
-        run: git fetch --prune --unshallow --tags
+        run: git fetch --prune --tags
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -56,14 +56,21 @@ jobs:
           mkdir -p .github
           cp release-changelog-config.yml .github/release-changelog-config.yml
 
+      - name: Debug Git Info
+        run: |
+          echo "Current tag: ${GITHUB_REF#refs/tags/}"
+          echo "All tags:"
+          git tag -l
+          echo "Latest commits:"
+          git log --oneline -n 5
+
       - name: Generate Changelog Notes
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v2
         with:
           configuration: .github/release-changelog-config.yml
           failOnError: false
-          fromTag: ${{ github.ref_name }}
-          toTag: ${{ github.event.before }}
+          ignorePreReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.ORIGIN_TOKEN }}
 
@@ -78,7 +85,7 @@ jobs:
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}
 
-            For full changelog, see the [commits since previous release](https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }})
+            For full changelog, see the [commits](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }})
           draft: false
           prerelease: false
           files: build/*.zip
