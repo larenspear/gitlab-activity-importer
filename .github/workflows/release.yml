@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # This gets all history and tags
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -48,11 +48,6 @@ jobs:
             zip "${file}.zip" "$file"
           done
 
-      - name: Move Changelog Config
-        run: |
-          mkdir -p .github
-          cp release-changelog-config.yml .github/release-changelog-config.yml
-
       - name: Debug Git Info
         run: |
           echo "Current tag: ${GITHUB_REF#refs/tags/}"
@@ -65,11 +60,11 @@ jobs:
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v2
         with:
-          configuration: .github/release-changelog-config.yml
+          configuration: .github/release-changelog-config.yml # The file is already in the correct location
           failOnError: false
           ignorePreReleases: true
         env:
-          GITHUB_TOKEN: ${{ secrets.ORIGIN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ORIGIN_TOKEN}}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
